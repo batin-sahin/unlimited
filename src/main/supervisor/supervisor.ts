@@ -1,6 +1,6 @@
-import path from "node:path";
 import type { ProfileConfig, RunEvent, SupervisorVerdict, VerdictAction } from "../../shared/types.js";
 import { streamProvider } from "../providers/index.js";
+import { pathViolation } from "./workspace-bounds.js";
 import type { AgentRunner } from "../agents/runner.js";
 import { SUPERVISOR_WARN_LIMIT } from "../../shared/types.js";
 
@@ -67,17 +67,8 @@ export class Supervisor {
       }
     }
 
-    const pathish = String(args.path || args.cwd || "");
-    if (pathish && ["write_file", "edit_file", "terminal"].includes(tool)) {
-      const resolved = path.resolve(this.profile.workspace, pathish);
-      const inside = resolved.startsWith(path.resolve(this.profile.workspace) + path.sep);
-      if (!inside && tool !== "terminal") {
-        return `Path outside the workspace: ${pathish}`;
-      }
-      if (tool === "terminal" && pathish && !resolved.startsWith("/tmp")) {
-        return `Terminal cwd outside the workspace: ${pathish}`;
-      }
-    }
+    const violation = pathViolation(tool, args, this.profile.workspace);
+    if (violation) return violation;
 
     void agentId;
     return null;
