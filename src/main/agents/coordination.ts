@@ -1,12 +1,11 @@
 import { MAX_COORDINATORS, type ProfileConfig, type RunEvent } from "../../shared/types.js";
 import { AgentRunner } from "./runner.js";
-import { dispatchTool } from "./dispatch.js";
+import { dispatchTool, type SubSession } from "./dispatch.js";
 import { ledgerTool, recallTool } from "../compaction/tools.js";
 import { formatRemaining } from "../budget.js";
 import type { EngineLike } from "../compaction/engine.js";
+import { READ_ONLY_TOOL_NAMES } from "./tools/index.js";
 import type { ToolContext, ToolDef } from "./tools/types.js";
-
-const READ_ONLY_TOOLS = new Set(["read_file", "list_dir", "glob", "grep"]);
 
 /**
  * spawn_coordinator — the worker's relief valve: when the work outgrows it,
@@ -19,6 +18,7 @@ export function spawnCoordinatorTool(
   emit: (event: RunEvent) => void,
   runners: Map<string, AgentRunner>,
   makeEngine: (agentId: string) => EngineLike,
+  sessions: Map<string, SubSession>,
   budgetRemainingMs: () => number,
 ): ToolDef {
   let spawned = 0;
@@ -37,7 +37,7 @@ export function spawnCoordinatorTool(
     risky: true,
     execute: async (args, ctx: ToolContext) => {
       if (spawned >= MAX_COORDINATORS) {
-        return { ok: false, output: `Coordinator limit reached (${MAX_COORDINATORS}). Integrate their reports and continue yourself.` };
+        return { ok: false, output: `Coordinator limit reached (${MAX_COORDINATORS}). Integrate their reports and keep dispatching.` };
       }
       const mission = String(args.mission || "").trim();
       if (!mission) return { ok: false, output: "spawn_coordinator needs a mission." };
@@ -48,7 +48,9 @@ export function spawnCoordinatorTool(
       emit({ type: "agent-started", agentId: coordId, role: "coordinator", label: `Coordinator ${spawned}`, model: profile.source.model, at: Date.now() });
 
       const engine = makeEngine(coordId);
-      const dispatch = dispatchTool(profile, runId, emit, runners, makeEngine);
+      // Same session map as the worker: a coordinator continues the
+      // sub-agent the worker already opened instead of spawning a twin.
+      const dispatch = dispatchTool(profile, runId, emit, runners, makeEngine, sessions);
       const coordinator = new AgentRunner({
         agentId: coordId,
         role: "coordinator",
@@ -67,7 +69,7 @@ export function spawnCoordinatorTool(
           ledgerTool(engine.ledgerStore),
           recallTool(engine.recallStore),
         ],
-        allowedTools: [...READ_ONLY_TOOLS],
+        allowedTools: [...READ_ONLY_TOOL_NAMES],
         timeLine: () => ({
           remaining: formatRemaining(budgetRemainingMs()),
           pausedNote: "",

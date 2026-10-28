@@ -9,7 +9,7 @@ import { workerSystem, WRAP_UP_TASK } from "./agents/prompts.js";
 import { readJournal } from "./journal-reader.js";
 import { buildResumePlan, type ResumePlan } from "./resume/plan.js";
 import { Supervisor } from "./supervisor/supervisor.js";
-import { dispatchTool } from "./agents/dispatch.js";
+import { dispatchTool, type SubSession } from "./agents/dispatch.js";
 import { spawnCoordinatorTool } from "./agents/coordination.js";
 import { askDelegateTool } from "./delegates/tool.js";
 import { checkDelegateHealth } from "./delegates/health.js";
@@ -17,6 +17,7 @@ import { CompactionEngine, type EngineLike } from "./compaction/engine.js";
 import { ledgerTool, recallTool } from "./compaction/tools.js";
 import "./agents/tools/files.js";
 import "./agents/tools/terminal.js";
+import { READ_ONLY_TOOL_NAMES } from "./agents/tools/index.js";
 
 interface ActiveRun {
   runId: string;
@@ -102,6 +103,9 @@ export class RunManager {
       supervisor.observe(event);
     };
 
+    // Sub-agent sessions live for the whole run: dispatch opens one per slot,
+    // every later dispatch is a follow-up in that same context.
+    const sessions = new Map<string, SubSession>();
     const workerEngine = this.makeEngine(profile, runId, "worker", budget, emitBase);
     const recallStores: { close(): void }[] = [workerEngine.recallStore];
     const makeEngineFor = (agentId: string): EngineLike => {
@@ -118,6 +122,9 @@ export class RunManager {
       runId,
       workspace: profile.workspace,
       baseSystem: workerSystem(profile, deadlineLocal(budget)),
+      // The worker conducts: it reads and verifies, but every file edit and
+      // command goes through a sub-agent. Keeps its context a plan, not code.
+      allowedTools: [...READ_ONLY_TOOL_NAMES],
       hooks: {
         emit,
         beforeTurn: (runner, turn) => workerEngine.beforeTurn(runner, turn),
@@ -125,8 +132,8 @@ export class RunManager {
           workerEngine.recallStore.append(agentId, `tool-output:${tool}`, output),
       },
       extraTools: [
-        dispatchTool(profile, runId, emit, runnerMap, makeEngineFor),
-        spawnCoordinatorTool(profile, runId, emit, runnerMap, makeEngineFor, () => budget.remainingMs()),
+        dispatchTool(profile, runId, emit, runnerMap, makeEngineFor, sessions),
+        spawnCoordinatorTool(profile, runId, emit, runnerMap, makeEngineFor, sessions, () => budget.remainingMs()),
         ledgerTool(workerEngine.ledgerStore),
         recallTool(workerEngine.recallStore),
         ...(profile.delegate ? [askDelegateTool(profile, runId, emit)] : []),

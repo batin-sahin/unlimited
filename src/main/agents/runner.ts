@@ -77,6 +77,7 @@ export class AgentRunner {
   usage = { input: 0, output: 0 };
   private controller = new AbortController();
   private turn = 0;
+  private running = false;
   private killed = false;
   private killReason = "";
   private done = false;
@@ -97,6 +98,21 @@ export class AgentRunner {
     return this.killed;
   }
 
+  /** True while a run() invocation is inside its loop. */
+  get isBusy(): boolean {
+    return this.running;
+  }
+
+  /** Messages held in this agent's live context (session size). */
+  get messageCount(): number {
+    return this.messages.length;
+  }
+
+  /** Tokens spent by this agent so far, input + output. */
+  get spentTokens(): number {
+    return this.usage.input + this.usage.output;
+  }
+
   get finishReason(): string {
     return this.done ? this.finalSummary : this.killed ? `killed: ${this.killReason}` : "max-turns";
   }
@@ -114,9 +130,30 @@ export class AgentRunner {
     this.flushText();
   }
 
-  /** Run the loop until done/killed/budget. Resolves with the final summary text. */
+  /**
+   * Run the loop until done/killed/budget. Resolves with the final summary.
+   * A runner is a SESSION, not a single shot: calling run() again continues
+   * the same conversation, so follow-up briefs land in a context that
+   * already knows the work. A fresh context costs a whole re-read of the
+   * project; continuation is what keeps a long run cheap.
+   */
   async run(task: string): Promise<string> {
+    if (this.killed) return `KILLED: ${this.killReason}`;
+    if (this.running) throw new Error(`agent ${this.opts.agentId} is already running`);
+    this.running = true;
+    // A previous report_done ended that dispatch, not the session.
+    this.done = false;
+    this.finalSummary = "";
+    try {
+      return await this.loop(task);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async loop(task: string): Promise<string> {
     this.messages.push({ role: "user", content: task });
+    const startTurn = this.turn;
     const tools = allTools().filter((t) => !this.opts.allowedTools || this.opts.allowedTools.includes(t.name));
     const specs = [
       ...tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })),
@@ -130,7 +167,8 @@ export class AgentRunner {
     ];
 
     while (!this.killed && !this.done) {
-      if (this.opts.maxTurns && this.turn >= this.opts.maxTurns) break;
+      // maxTurns is a per-dispatch allowance, not a lifetime cap.
+      if (this.opts.maxTurns && this.turn - startTurn >= this.opts.maxTurns) break;
       this.turn++;
       await this.opts.hooks.beforeTurn?.(this, this.turn);
 

@@ -7,13 +7,18 @@ agent that steps out of line.
 
 ## The crew
 
-- **Worker main agent** — runs on your trusted source provider, coordinates everything.
+- **Worker main agent** — runs on your trusted source provider. It plans, dispatches,
+  and verifies; it has no write or terminal tools, so its context stays a plan instead
+  of a growing pile of code.
 - **Supervisor main agent** — a copy of the worker on the same trusted provider. It
   touches nothing; it watches everything against your goal and forbidden list, warns
   offenders once, and kills them on repeat.
 - **Coordinators (max 2)** — spawned by the worker when it feels stretched; they
   decompose and dispatch, they do not write files.
-- **Sub-agents (1–25)** — each with its own provider/model/key.
+- **Sub-agents (1–25)** — each with its own provider/model/key. A slot is a
+  **persistent session**: the worker opens it with a work order and continues it
+  with follow-ups, so the agent keeps the context it built. Opening a session
+  requires a stated deliverable; there is no "new agent per tool call".
 - **Delegate (optional)** — instead of built-in tools, the crew can drive an external
   CLI: OpenCode, Claude Code, Codex, or Kimi Code. Health-checked before start.
 
