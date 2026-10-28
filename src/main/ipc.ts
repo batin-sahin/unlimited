@@ -2,8 +2,8 @@ import { BrowserWindow, dialog, ipcMain } from "electron";
 import { checkDelegateHealth } from "./delegates/health.js";
 import { deleteProfile, listProfiles, loadProfile, saveProfile } from "./profiles.js";
 import { RunManager } from "./orchestrator.js";
+import { resumableRuns } from "./journal-reader.js";
 import type { DelegateKind, ProfileConfig, RunEvent } from "../shared/types";
-
 let win: BrowserWindow | null = null;
 let runManager: RunManager | null = null;
 
@@ -52,6 +52,10 @@ export function registerIpc(): void {
   ipcMain.handle("unlimited:check-delegate", (_e, kind: DelegateKind) => checkDelegateHealth(kind));
 
   ipcMain.handle("unlimited:start-run", (_e, profileId: string) => manager().startRun(profileId));
+
+  ipcMain.handle("unlimited:resume-run", (_e, priorRunId: string) => manager().resumeRun(priorRunId));
+
+  ipcMain.handle("unlimited:resumable-runs", () => resumableRuns());
 
   ipcMain.handle("unlimited:panic", () => {
     manager().panic();

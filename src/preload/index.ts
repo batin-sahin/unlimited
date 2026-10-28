@@ -9,6 +9,8 @@ const api: UnlimitedApi = {
   pickDirectory: () => ipcRenderer.invoke("unlimited:pick-directory"),
   checkDelegate: (kind) => ipcRenderer.invoke("unlimited:check-delegate", kind),
   startRun: (profileId) => ipcRenderer.invoke("unlimited:start-run", profileId),
+  resumeRun: (priorRunId) => ipcRenderer.invoke("unlimited:resume-run", priorRunId),
+  resumableRuns: () => ipcRenderer.invoke("unlimited:resumable-runs"),
   panic: () => ipcRenderer.invoke("unlimited:panic"),
   onEvent: (cb) => {
     const listener = (_e: unknown, event: RunEvent) => cb(event);

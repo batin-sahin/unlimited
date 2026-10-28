@@ -2,6 +2,7 @@ import type { AgentRole, ProviderConfig, RunEvent } from "../../shared/types.js"
 import type { ChatMessage, ProviderStreamHandlers, ProviderStreamResult } from "../providers/types.js";
 import { streamProvider } from "../providers/index.js";
 import { CONTINUE_NUDGE, turnHeader } from "./prompts.js";
+import { TurnWatchdog, TURN_WATCHDOG_MS } from "./watchdog.js";
 import { allTools, getTool } from "./tools/index.js";
 import type { ToolContext, ToolDef } from "./tools/types.js";
 
@@ -269,20 +270,48 @@ export class AgentRunner {
     return this.opts.extraTools?.find((t) => t.name === name);
   }
 
-  /** 429/5xx/network backoff. Honors Retry-After; gives up after 8 tries. */
+  /**
+   * 429/5xx/network backoff. Honors Retry-After; gives up after 8 tries.
+   * A per-attempt watchdog aborts silent provider connections (a stalled
+   * stream is a dead link, not a thinking model) and the loop retries.
+   */
   private async callWithRetry(
     req: Parameters<typeof streamProvider>[0],
     handlers: ProviderStreamHandlers,
   ): Promise<ProviderStreamResult> {
     let attempt = 0;
     for (;;) {
+      let watchdogFired = false;
+      // Attempt-scoped abort: the watchdog (or the runner's kill) cancels
+      // just this attempt; the run itself survives and retries.
+      const attemptController = new AbortController();
+      const onRunnerAbort = () => attemptController.abort();
+      this.controller.signal.addEventListener("abort", onRunnerAbort, { once: true });
+      const watchdog = new TurnWatchdog({
+        timeoutMs: TURN_WATCHDOG_MS,
+        onTimeout: () => {
+          watchdogFired = true;
+          attemptController.abort();
+        },
+      });
+      const fed: ProviderStreamHandlers = {
+        onText: (piece) => {
+          watchdog.feed();
+          handlers.onText?.(piece);
+        },
+        onReasoning: (piece) => {
+          watchdog.feed();
+          handlers.onReasoning?.(piece);
+        },
+      };
       try {
-        return await streamProvider(req, handlers);
+        return await streamProvider({ ...req, signal: attemptController.signal }, fed);
       } catch (err: any) {
         if (this.controller.signal.aborted) throw err;
         const message = String(err?.message || err);
         const status = Number(/\s(\d{3}):\s/.exec(message)?.[1] || 0);
         const retryable =
+          watchdogFired ||
           status === 429 ||
           status === 408 ||
           (status >= 500 && status < 600) ||
@@ -294,6 +323,10 @@ export class AgentRunner {
           : Math.min(1000 * 2 ** attempt + Math.random() * 1000, 120_000);
         await sleep(delay, this.controller.signal);
         attempt++;
+      } finally {
+        // Runs whether the attempt succeeded, failed, or was watchdog-killed.
+        watchdog.dispose();
+        this.controller.signal.removeEventListener("abort", onRunnerAbort);
       }
     }
   }

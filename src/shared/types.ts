@@ -198,6 +198,10 @@ export interface UnlimitedApi {
   checkDelegate(kind: DelegateKind): Promise<DelegateHealth>;
   /** Wired to the orchestrator in Faz 2; rejects until then. */
   startRun(profileId: string): Promise<{ runId: string }>;
+  /** Reopen an interrupted run: same runId, journal appends, ledger/cold continue. */
+  resumeRun(priorRunId: string): Promise<{ runId: string }>;
+  /** Interrupted (or never-ended) runs with their profile ids, newest first. */
+  resumableRuns(): Promise<{ runId: string; lastAt: number; profileId: string | null }[]>;
   panic(): Promise<void>;
   onEvent(cb: (event: RunEvent) => void): () => void;
 }

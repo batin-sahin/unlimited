@@ -6,6 +6,8 @@ import { loadProfile } from "./profiles.js";
 import { startPowerBlock, stopPowerBlock } from "./power.js";
 import { AgentRunner } from "./agents/runner.js";
 import { workerSystem, WRAP_UP_TASK } from "./agents/prompts.js";
+import { readJournal } from "./journal-reader.js";
+import { buildResumePlan, type ResumePlan } from "./resume/plan.js";
 import { Supervisor } from "./supervisor/supervisor.js";
 import { dispatchTool } from "./agents/dispatch.js";
 import { spawnCoordinatorTool } from "./agents/coordination.js";
@@ -44,12 +46,35 @@ export class RunManager {
     const profile = loadProfile(profileId);
     if (!profile) throw new Error(`Profile not found: ${profileId}`);
     this.validate(profile);
+    return this.startRunInternal(profile, Math.random().toString(36).slice(2, 10), null);
+  }
 
-    const runId = Math.random().toString(36).slice(2, 10);
+  /**
+   * Resume an interrupted run: same runId, so the journal appends and the
+   * per-agent ledger + cold store continue exactly where they stopped.
+   * The budget carries on from the last journaled tick — crashing never
+   * resets the clock.
+   */
+  async resumeRun(priorRunId: string): Promise<{ runId: string }> {
+    if (this.active) throw new Error("A run is already active. Panic or wait for it to end.");
+    const read = readJournal(priorRunId);
+    const plan = buildResumePlan(read.events);
+    if (!plan?.profileId) throw new Error(`Run ${priorRunId} has nothing to resume.`);
+    if (plan.budgetRemainingMs <= 0) throw new Error(`Run ${priorRunId} has no budget left — start a fresh run instead.`);
+    const profile = loadProfile(plan.profileId);
+    if (!profile) throw new Error(`Profile "${plan.profileId}" (from the prior run) not found.`);
+    return this.startRunInternal(profile, priorRunId, plan);
+  }
+
+  private async startRunInternal(
+    profile: ProfileConfig,
+    runId: string,
+    resume: ResumePlan | null,
+  ): Promise<{ runId: string }> {
     const journal = new Journal(runId);
 
     startPowerBlock();
-    const budget = new BudgetClock(budgetMs(profile.budget), profile.window);
+    const budget = new BudgetClock(resume ? resume.budgetRemainingMs : budgetMs(profile.budget), profile.window);
 
     const emitBase = (event: RunEvent) => {
       journal.append(event);
@@ -126,7 +151,7 @@ export class RunManager {
     }
 
     this.active = { runId, journal, budget, worker, recallStores, stopped: false };
-    emit({ type: "run-started", runId, profileId, at: Date.now() });
+    emit({ type: "run-started", runId, profileId: profile.id, at: Date.now() });
     emit({
       type: "agent-started",
       agentId: "worker",
@@ -135,6 +160,15 @@ export class RunManager {
       model: profile.source.model,
       at: Date.now(),
     });
+    if (resume) {
+      emit({
+        type: "agent-status",
+        agentId: "worker",
+        status: "running",
+        note: `resumed — ${resume.compactions} prior compactions · ${formatRemaining(resume.budgetRemainingMs)} left`,
+        at: Date.now(),
+      });
+    }
 
     let lastTickState = "";
     const wrapState = { initiated: false };
@@ -167,7 +201,7 @@ export class RunManager {
     budget.start();
 
     void worker
-      .run(this.kickoff(profile))
+      .run(resume ? this.resumeTask(profile, resume) : this.kickoff(profile))
       .then((summary) => {
         if (this.active?.runId === runId) void this.endRun("done", summary);
       })
@@ -214,6 +248,20 @@ export class RunManager {
 
   private kickoff(profile: ProfileConfig): string {
     return `Begin the run. First, restate your understanding of the goal in 3-5 lines and lay out the work plan. Then start executing with your tools. Workspace: ${profile.workspace}`;
+  }
+
+  /** The resumed worker's first message: a compact re-orientation brief. */
+  private resumeTask(profile: ProfileConfig, plan: ResumePlan): string {
+    const tail = plan.workerTail.map((t) => `- [${t.role}] ${t.text}`).join("\n");
+    const agents = plan.agents.map((a) => `${a.label} (${a.role}, ${a.lastStatus})`).join(", ") || "none";
+    return `RESUME: this run was interrupted (app restart or crash). Where things stood:
+- Remaining budget: ${formatRemaining(plan.budgetRemainingMs)}
+- Agents last known as: ${agents}
+- Prior compactions: ${plan.compactions} (${plan.coldMovedTokens} tokens in cold storage)
+- Last activity:
+${tail || "- (no text recorded)"}
+
+Your durable ledger from this run loads automatically, and everything evicted earlier is recallable. Re-orient by reading the workspace first — do not redo finished work — then continue toward the goal. Workspace: ${profile.workspace}`;
   }
 
   /** One compaction engine per agent; engines are cheap, all state is on disk. */
