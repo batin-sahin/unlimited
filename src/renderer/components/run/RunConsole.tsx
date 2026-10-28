@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Play, Siren } from "lucide-react";
 import type { ProfileMeta } from "../../../shared/types";
-import { errorMessage, formatRemaining, shortId } from "./format";
+import { errorMessage, formatAgo, formatRemaining, shortId } from "./format";
 import { AgentCard } from "./AgentCard";
 import { EventFeed } from "./EventFeed";
 import { useRunEvents } from "./useRunEvents";
@@ -13,9 +13,16 @@ interface RunConsoleProps {
   active: boolean;
 }
 
+/** Structural twin of the resumable-run row returned by resumableRuns(). */
+interface ResumableRun {
+  runId: string;
+  lastAt: number;
+  profileId: string | null;
+}
+
 /**
  * The run console. Everything on screen comes from the event stream; the
- * only commands it sends are startRun and panic.
+ * only commands it sends are startRun, resumeRun/resumableRuns, and panic.
  */
 export function RunConsole({ initialProfileId, active }: RunConsoleProps) {
   const { agents, budget, feed, verdicts, runState } = useRunEvents();
@@ -25,6 +32,8 @@ export function RunConsole({ initialProfileId, active }: RunConsoleProps) {
   const [error, setError] = useState<string | null>(null);
   const [armedUntil, setArmedUntil] = useState<number | null>(null);
   const [tick, setTick] = useState(() => Date.now());
+  const [resumable, setResumable] = useState<ResumableRun[]>([]);
+  const [resumingId, setResumingId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -38,6 +47,24 @@ export function RunConsole({ initialProfileId, active }: RunConsoleProps) {
   useEffect(() => {
     if (active) void refresh();
   }, [active, refresh]);
+
+  // Interrupted runs, fetched on mount/visibility and again whenever a run
+  // ends (and not while one is live — there is nothing to resume then).
+  useEffect(() => {
+    if (!active || runState.phase === "running") return;
+    let cancelled = false;
+    window.unlimited
+      .resumableRuns()
+      .then((runs) => {
+        if (!cancelled) setResumable(runs);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(errorMessage(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, runState.phase, runState.runId]);
 
   // "Run ▸" from the wizard re-selects the profile each time it fires.
   useEffect(() => {
@@ -72,6 +99,20 @@ export function RunConsole({ initialProfileId, active }: RunConsoleProps) {
       setError(errorMessage(err));
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function resume(runId: string) {
+    setResumingId(runId);
+    setError(null);
+    try {
+      await window.unlimited.resumeRun(runId);
+      // The run-started event (same runId) resets the console; drop the row now.
+      setResumable((rows) => rows.filter((r) => r.runId !== runId));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setResumingId(null);
     }
   }
 
@@ -126,7 +167,7 @@ export function RunConsole({ initialProfileId, active }: RunConsoleProps) {
             type="button"
             className="btn primary"
             onClick={() => void start()}
-            disabled={running || starting || !selectedId}
+            disabled={running || starting || resumingId !== null || !selectedId}
             aria-label="Start run with the selected profile"
           >
             <Play size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -159,6 +200,39 @@ export function RunConsole({ initialProfileId, active }: RunConsoleProps) {
           {runState.phase.toUpperCase()}
         </span>
       </p>
+
+      {runState.phase !== "running" && resumable.length > 0 ? (
+        <section className="run-resume" aria-label="Interrupted runs">
+          <h2 className="run-resume-title">Interrupted runs</h2>
+          <ul className="run-resume-rows">
+            {resumable.map((r) => {
+              const profile = r.profileId ? profiles.find((p) => p.id === r.profileId) : undefined;
+              return (
+                <li key={r.runId} className="run-resume-row">
+                  <span className="run-resume-id" title={r.runId}>
+                    {shortId(r.runId)}
+                  </span>
+                  <span className="run-resume-profile" title={profile?.workspace ?? ""}>
+                    {profile ? (profile.name || "").trim() || "(unnamed)" : r.profileId ? `profile ${shortId(r.profileId)}` : "no profile on record"}
+                  </span>
+                  <span className="run-resume-ago" title={new Date(r.lastAt).toLocaleString()}>
+                    {formatAgo(r.lastAt)}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn primary tiny"
+                    onClick={() => void resume(r.runId)}
+                    disabled={resumingId !== null}
+                    aria-label={`Resume run ${shortId(r.runId)}`}
+                  >
+                    {resumingId === r.runId ? "Resuming…" : "Resume"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {error ? (
         <p className="run-error" role="alert">

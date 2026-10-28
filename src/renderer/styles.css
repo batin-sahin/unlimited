@@ -1545,3 +1545,58 @@ textarea.field {
   padding: 8px 4px;
   color: var(--ink-3);
 }
+
+/* ---------- Interrupted runs (resume) ---------- */
+
+.run-resume {
+  flex: none;
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+}
+
+.run-resume-title {
+  margin: 0;
+  padding: 8px 12px 6px;
+  color: var(--amber);
+  font-family: var(--font-cond);
+  font-size: var(--text-10);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.run-resume-rows {
+  margin: 0;
+  padding: 0 0 6px;
+  list-style: none;
+}
+
+.run-resume-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 12px;
+}
+
+.run-resume-id {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-11);
+}
+
+.run-resume-profile {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-resume-ago {
+  flex: none;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-10);
+}

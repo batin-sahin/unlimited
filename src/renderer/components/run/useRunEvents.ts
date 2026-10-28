@@ -103,18 +103,20 @@ function labelOf(state: State, agentId: string): string {
 function reduceEvent(state: State, event: RunEvent): State {
   switch (event.type) {
     case "run-started": {
-      // Same runId → duplicate delivery, ignore. New runId → full reset.
-      if (state.runState.runId === event.runId) return state;
+      // Fresh start or resume: reset the console. The only ignored case is a
+      // duplicate run-started for the run already live on screen.
+      if (state.runState.phase === "running" && state.runState.runId === event.runId) return state;
       const fresh: State = {
         ...initialState,
         nextId: state.nextId,
         runState: { phase: "running", runId: event.runId, endReason: null, endSummary: "" },
       };
+      const resume = state.runState.runId === event.runId && state.runState.phase !== "idle";
       return pushRow(fresh, {
         at: event.at,
         kind: "run",
         tag: "RUN",
-        text: `run started · profile ${shortId(event.profileId)}`,
+        text: resume ? `run resumed · ${shortId(event.runId)}` : `run started · profile ${shortId(event.profileId)}`,
         tone: "banner",
       });
     }
