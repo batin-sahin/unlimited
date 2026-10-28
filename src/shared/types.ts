@@ -169,6 +169,7 @@ export type RunEvent =
       at: number;
     }
   | { type: "supervisor-verdict"; verdict: SupervisorVerdict; at: number }
+  | { type: "pressure"; agentId: string; pressure: PressureSnapshot; at: number }
   | {
       type: "compaction";
       agentId: string;

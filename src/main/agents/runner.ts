@@ -20,8 +20,10 @@ const REPORT_DONE_SPEC = {
 
 export interface RunnerHooks {
   emit(event: RunEvent): void;
-  /** Compaction seam — Faz 3 wires the engine here. */
-  beforeTurn?(turn: number): Promise<void>;
+  /** Compaction seam — the engine rewrites messages before each turn. */
+  beforeTurn?(runner: AgentRunner, turn: number): Promise<void>;
+  /** Full tool outputs stream to the cold store for later recall. */
+  onToolOutput?(agentId: string, tool: string, output: string): void;
 }
 
 export interface RunnerOptions {
@@ -37,6 +39,8 @@ export interface RunnerOptions {
   extraToolSpecs?: { name: string; description: string; parameters: Record<string, unknown> }[];
   /** Per-run executable tools (dispatch_task, ask_delegate) — offered AND executed. */
   extraTools?: ToolDef[];
+  /** When set, only these registry tool names are offered/executable. */
+  allowedTools?: string[];
   maxTurns?: number;
   hooks: RunnerHooks;
   /** Fresh remaining-time line for every turn. */
@@ -84,6 +88,10 @@ export class AgentRunner {
     return this.controller.signal;
   }
 
+  get systemBlock(): string {
+    return this.opts.baseSystem;
+  }
+
   get isKilled(): boolean {
     return this.killed;
   }
@@ -108,7 +116,7 @@ export class AgentRunner {
   /** Run the loop until done/killed/budget. Resolves with the final summary text. */
   async run(task: string): Promise<string> {
     this.messages.push({ role: "user", content: task });
-    const tools = allTools();
+    const tools = allTools().filter((t) => !this.opts.allowedTools || this.opts.allowedTools.includes(t.name));
     const specs = [
       ...tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })),
       ...(this.opts.extraTools || []).map((t) => ({
@@ -123,7 +131,7 @@ export class AgentRunner {
     while (!this.killed && !this.done) {
       if (this.opts.maxTurns && this.turn >= this.opts.maxTurns) break;
       this.turn++;
-      await this.opts.hooks.beforeTurn?.(this.turn);
+      await this.opts.hooks.beforeTurn?.(this, this.turn);
 
       const { remaining, pausedNote } = this.opts.timeLine();
       const system = `${this.opts.baseSystem}\n\n${turnHeader(this.turn, remaining, pausedNote)}`;
@@ -210,6 +218,20 @@ export class AgentRunner {
     });
 
     const tool = this.extraTool(name) ?? getTool(name);
+    if (this.opts.allowedTools && !this.extraTool(name) && !this.opts.allowedTools.includes(name)) {
+      this.opts.hooks.emit({
+        type: "tool-result",
+        agentId: this.opts.agentId,
+        callId,
+        ok: false,
+        outputHead: `Tool ${name} is not available to this agent.`,
+        outputTail: "",
+        elidedTokens: 0,
+        at: Date.now(),
+      });
+      this.messages.push({ role: "tool", toolCallId: callId, toolName: name, content: `Tool ${name} is not available to this agent.` });
+      return;
+    }
     const ctx: ToolContext = {
       workspace: this.opts.workspace,
       runId: this.opts.runId,
@@ -236,6 +258,9 @@ export class AgentRunner {
       elidedTokens: 0,
       at: Date.now(),
     });
+    // Full output lands in the cold store before any elision — the promise
+    // in the elision marker is kept here.
+    this.opts.hooks.onToolOutput?.(this.opts.agentId, name, output);
     this.messages.push({ role: "tool", toolCallId: callId, toolName: name, content: output });
   }
 

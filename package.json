@@ -12,6 +12,7 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "typecheck": "tsc --noEmit",
+    "test": "node --test src/main/compaction/*.test.ts",
     "dev": "vite",
     "dev:desktop": "npm run build:main && npm run build:renderer && electron .",
     "start": "npm run build && electron .",

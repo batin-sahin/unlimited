@@ -19,8 +19,8 @@ export function ProfileList({ profiles, busyId, onLoad, onDelete }: ProfileListP
         <ul className="profile-rows">
           {profiles.map((p) => (
             <li key={p.id} className="profile-row">
-              <span className="profile-name">{p.name.trim() || "(unnamed)"}</span>
-              <span className="profile-path" title={`${p.workspace} · saved ${new Date(p.updatedAt).toLocaleString()}`}>
+              <span className="profile-name">{(p.name || "").trim() || "(unnamed)"}</span>
+              <span className="profile-path" title={`${p.workspace || ""} · saved ${new Date(p.updatedAt || 0).toLocaleString()}`}>
                 {p.workspace || "—"}
               </span>
               <div className="profile-actions">

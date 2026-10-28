@@ -36,6 +36,9 @@ export class Supervisor {
     if (event.type === "tool-call") {
       this.toolCount++;
       this.feed.push(`[${event.agentId}] ${event.tool} ${event.summary}`);
+      // Weeks-long runs: the feed is a sliding window, not an archive —
+      // the journal is the durable record, this is only review input.
+      if (this.feed.length > 600) this.feed.splice(0, this.feed.length - 600);
       const violation = this.deterministicCheck(event.tool, event.args, event.agentId);
       if (violation) {
         this.enforce({ targetAgentId: event.agentId, action: "warn", reason: violation, at: Date.now() });
@@ -44,6 +47,7 @@ export class Supervisor {
     } else if (event.type === "tool-result") {
       const head = event.ok ? event.outputHead : `FAILED: ${event.outputHead}`;
       this.feed.push(`[${event.agentId}] → ${head.replace(/\n/g, " ").slice(0, 160)}`);
+      if (this.feed.length > 600) this.feed.splice(0, this.feed.length - 600);
     }
 
     // LLM verdict pass: every 6 tool calls, at most every 90 seconds.

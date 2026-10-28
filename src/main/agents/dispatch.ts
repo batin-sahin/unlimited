@@ -1,5 +1,7 @@
 import type { ProfileConfig, RunEvent } from "../../shared/types.js";
 import { AgentRunner } from "./runner.js";
+import { ledgerTool, recallTool } from "../compaction/tools.js";
+import type { EngineLike } from "../compaction/engine.js";
 import type { ToolContext, ToolDef } from "./tools/types.js";
 
 /**
@@ -13,6 +15,7 @@ export function dispatchTool(
   runId: string,
   emit: (event: RunEvent) => void,
   runners: Map<string, AgentRunner>,
+  makeEngine: (agentId: string) => EngineLike,
 ): ToolDef {
   return {
     name: "dispatch_task",
@@ -54,6 +57,7 @@ export function dispatchTool(
         at: Date.now(),
       });
 
+      const engine = makeEngine(childId);
       const child = new AgentRunner({
         agentId: childId,
         role: "sub",
@@ -62,7 +66,12 @@ export function dispatchTool(
         runId,
         workspace: ctx.workspace,
         baseSystem: subAgentSystem(profile),
-        hooks: { emit },
+        hooks: {
+          emit,
+          beforeTurn: (runner, turn) => engine.beforeTurn(runner, turn),
+          onToolOutput: (agentId, tool, output) => engine.recallStore.append(agentId, `tool-output:${tool}`, output),
+        },
+        extraTools: [ledgerTool(engine.ledgerStore), recallTool(engine.recallStore)],
         timeLine: () => ({ remaining: "plenty (parent budget)", pausedNote: "" }),
         deadlineLocal: "parent-managed",
         maxTurns: 60,

@@ -42,7 +42,9 @@ export interface WizardDraft {
 export const DEFAULT_BASE_URL: Record<ProviderKind, string> = {
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
-  google: "https://generativelanguage.googleapis.com",
+  // Google client builds {base}/models/<model>:streamGenerateContent?alt=sse,
+  // so the v1beta path must be part of the base URL.
+  google: "https://generativelanguage.googleapis.com/v1beta",
 };
 
 export const DEFAULT_PROVIDER_KIND: ProviderKind = "openai";
