@@ -119,6 +119,8 @@ function reduceEvent(state: State, event: RunEvent): State {
       });
     }
     case "run-ended": {
+      // A late end for a run we already replaced must not clobber the live one.
+      if (state.runState.runId && event.runId !== state.runState.runId) return state;
       const tone: FeedTone = event.reason === "panic" || event.reason === "error" ? "brick" : event.reason === "done" ? "accent" : "amber";
       return pushRow(
         {

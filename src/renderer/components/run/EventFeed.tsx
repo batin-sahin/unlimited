@@ -5,6 +5,8 @@ import { formatClock } from "./format";
 
 interface EventFeedProps {
   rows: FeedRow[];
+  /** True while the RUN tab is visible; re-sticks the tail when it re-opens. */
+  active: boolean;
 }
 
 type Filter = "all" | "tools" | "text" | "supervision" | "compaction";
@@ -26,7 +28,7 @@ const KINDS_BY_FILTER: Record<Filter, FeedRow["kind"][] | null> = {
 };
 
 /** Main scrolling area. Newest last; auto-scrolls unless the user scrolled up. */
-export function EventFeed({ rows }: EventFeedProps) {
+export function EventFeed({ rows, active }: EventFeedProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [stick, setStick] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -34,11 +36,12 @@ export function EventFeed({ rows }: EventFeedProps) {
 
   const visible = filter === "all" ? rows : rows.filter((r) => KINDS_BY_FILTER[filter]?.includes(r.kind));
 
-  // Follow the tail while the user is at (or near) the bottom.
+  // Follow the tail while the user is at (or near) the bottom. Re-stick
+  // when the tab re-opens: rows may have arrived while the pane was hidden.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [visible.length]);
+    if (el && stickRef.current && active) el.scrollTop = el.scrollHeight;
+  }, [visible.length, active]);
 
   function onScroll(e: UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;

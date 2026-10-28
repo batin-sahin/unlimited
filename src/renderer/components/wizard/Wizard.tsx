@@ -12,6 +12,11 @@ import { ProfileList } from "./ProfileList";
 import { useProfileState } from "./useProfileState";
 import { checkStep } from "./validate";
 
+interface WizardProps {
+  /** Present when the run console exists; wires the profile list's "Run ▸". */
+  onRunProfile?: (profileId: string) => void;
+}
+
 const STEP_DEFS = [
   { id: "project", title: "Project", hint: "Name the run and point it at the one workspace it may touch." },
   {
@@ -54,7 +59,7 @@ const READY_NOTES = [
  * useProfileState. Save goes through window.unlimited.saveProfile only —
  * startRun/panic are deliberately out of scope for Faz 1.
  */
-export function Wizard() {
+export function Wizard({ onRunProfile }: WizardProps) {
   const state = useProfileState();
   const [step, setStep] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
@@ -193,6 +198,7 @@ export function Wizard() {
           busyId={busyProfileId}
           onLoad={(id) => void loadProfileById(id)}
           onDelete={(id) => void deleteProfileById(id)}
+          onRun={onRunProfile}
         />
 
         {bootError ? (

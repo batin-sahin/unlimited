@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, Pencil, Trash2 } from "lucide-react";
 import type { ProfileMeta } from "../../../shared/types";
 
 interface ProfileListProps {
@@ -6,10 +6,12 @@ interface ProfileListProps {
   busyId: string | null;
   onLoad: (id: string) => void;
   onDelete: (id: string) => void;
+  /** Present when the run console is available; renders the "Run ▸" action. */
+  onRun?: (id: string) => void;
 }
 
 /** Existing profiles on disk, shown beside the wizard. Load re-opens one for editing. */
-export function ProfileList({ profiles, busyId, onLoad, onDelete }: ProfileListProps) {
+export function ProfileList({ profiles, busyId, onLoad, onDelete, onRun }: ProfileListProps) {
   return (
     <section className="card profile-list" aria-label="Saved profiles">
       <h2 className="side-title">Profiles</h2>
@@ -24,6 +26,18 @@ export function ProfileList({ profiles, busyId, onLoad, onDelete }: ProfileListP
                 {p.workspace || "—"}
               </span>
               <div className="profile-actions">
+                {onRun ? (
+                  <button
+                    type="button"
+                    className="btn tiny"
+                    onClick={() => onRun(p.id)}
+                    disabled={busyId !== null}
+                    aria-label={`Run profile ${(p.name || "").trim() || "unnamed"}`}
+                  >
+                    <ChevronRight size={12} strokeWidth={1.75} aria-hidden="true" />
+                    Run ▸
+                  </button>
+                ) : null}
                 <button type="button" className="btn tiny" onClick={() => onLoad(p.id)} disabled={busyId !== null}>
                   <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
                   Load
