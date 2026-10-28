@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, CircleCheck, RotateCcw, Save } from "lucide-react";
-import { MAX_SUB_AGENTS, type Bootstrap, type ProfileConfig, type ProfileMeta } from "../../../shared/types";
+import { MAX_SUB_AGENTS, type Bootstrap, type CatalogMeta, type ProfileConfig, type ProfileMeta } from "../../../shared/types";
 import { errorMessage } from "./draft";
 import { StepDelegate } from "./StepDelegate";
 import { StepProject } from "./StepProject";
@@ -67,6 +67,7 @@ export function Wizard({ onRunProfile }: WizardProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [profiles, setProfiles] = useState<ProfileMeta[]>([]);
+  const [catalog, setCatalog] = useState<CatalogMeta | null>(null);
   const [version, setVersion] = useState("");
   const [bootError, setBootError] = useState("");
   const [busyProfileId, setBusyProfileId] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export function Wizard({ onRunProfile }: WizardProps) {
     try {
       const boot: Bootstrap = await window.unlimited.bootstrap();
       setProfiles(boot.profiles);
+      setCatalog(boot.catalog ?? null);
       setVersion(boot.version);
       setBootError("");
     } catch (err) {
@@ -243,10 +245,11 @@ export function Wizard({ onRunProfile }: WizardProps) {
                 {step === 0 ? (
                   <StepProject draft={state.draft} update={state.update} />
                 ) : step === 1 ? (
-                  <StepSource draft={state.draft} updateSource={state.updateSource} />
+                  <StepSource draft={state.draft} updateSource={state.updateSource} catalog={catalog} />
                 ) : step === 2 ? (
                   <StepSubAgents
                     draft={state.draft}
+                    catalog={catalog}
                     addSubAgent={state.addSubAgent}
                     removeSubAgent={state.removeSubAgent}
                     updateSubAgent={state.updateSubAgent}

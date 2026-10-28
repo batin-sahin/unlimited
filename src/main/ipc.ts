@@ -3,7 +3,9 @@ import { checkDelegateHealth } from "./delegates/health.js";
 import { deleteProfile, listProfiles, loadProfile, saveProfile } from "./profiles.js";
 import { RunManager } from "./orchestrator.js";
 import { resumableRuns } from "./journal-reader.js";
+import { catalogMeta } from "./providers/catalog.js";
 import type { DelegateKind, ProfileConfig, RunEvent } from "../shared/types";
+
 let win: BrowserWindow | null = null;
 let runManager: RunManager | null = null;
 
@@ -28,6 +30,7 @@ export function registerIpc(): void {
   ipcMain.handle("unlimited:bootstrap", () => ({
     version: "0.1.0",
     profiles: listProfiles(),
+    catalog: catalogMeta(),
   }));
 
   ipcMain.handle("unlimited:save-profile", (_e, profile: ProfileConfig) => {

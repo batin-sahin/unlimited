@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
-import { MAX_SUB_AGENTS, type SubAgentConfig } from "../../../shared/types";
+import { MAX_SUB_AGENTS, type CatalogMeta, type SubAgentConfig } from "../../../shared/types";
 import type { WizardDraft } from "./draft";
 import { ProviderFields } from "./ProviderFields";
 import { providerFieldProblems } from "./validate";
 
 interface StepSubAgentsProps {
   draft: WizardDraft;
+  /** models.dev catalog from bootstrap; null while it is still loading. */
+  catalog: CatalogMeta | null;
   addSubAgent: () => void;
   removeSubAgent: (id: string) => void;
   updateSubAgent: (id: string, patch: Partial<SubAgentConfig>) => void;
@@ -23,7 +25,7 @@ function isFilled(s: SubAgentConfig): boolean {
  * Progressive disclosure: a fully-filled slot collapses to a one-line
  * summary (label + model); click the summary to re-edit it.
  */
-export function StepSubAgents({ draft, addSubAgent, removeSubAgent, updateSubAgent }: StepSubAgentsProps) {
+export function StepSubAgents({ draft, catalog, addSubAgent, removeSubAgent, updateSubAgent }: StepSubAgentsProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
@@ -134,6 +136,7 @@ export function StepSubAgents({ draft, addSubAgent, removeSubAgent, updateSubAge
                   idPrefix={`slot-${slot.id}`}
                   value={slot}
                   onChange={(next) => updateSubAgent(slot.id, next)}
+                  catalog={catalog}
                   onFieldBlur={(field) => blur(slot.id, field)}
                   errors={errors}
                   compactKeyNote

@@ -17,12 +17,43 @@ export const SUPERVISOR_WARN_LIMIT = 1;
 
 export type ProviderKind = "openai" | "anthropic" | "google";
 
+/**
+ * Wire-protocol config for one provider slot. `kind` is the PROTOCOL the
+ * streaming client uses (OpenAI-compatible / Anthropic / Google); a catalog
+ * provider id picks the endpoint and gets its kind derived automatically.
+ */
 export interface ProviderConfig {
   kind: ProviderKind;
+  /** Catalog provider id (models.dev); absent for custom endpoints. */
+  providerId?: string;
   /** OpenAI-compatible / Anthropic / Google endpoint. */
   baseUrl: string;
   model: string;
   apiKey: string;
+}
+
+/** Slim catalog entry the renderer's provider picker uses. */
+export interface CatalogModelMeta {
+  id: string;
+  name: string;
+  context?: number;
+  toolCall?: boolean;
+}
+
+export interface CatalogProviderMeta {
+  id: string;
+  name: string;
+  /** Default API endpoint (from catalog or the well-known fallback). */
+  api: string;
+  kind: ProviderKind;
+  doc?: string;
+  models: CatalogModelMeta[];
+}
+
+export interface CatalogMeta {
+  generatedAt: string;
+  source: string;
+  providers: CatalogProviderMeta[];
 }
 
 export interface SubAgentConfig extends ProviderConfig {
@@ -186,6 +217,8 @@ export type RunEvent =
 export interface Bootstrap {
   version: string;
   profiles: ProfileMeta[];
+  /** models.dev catalog (slimmed) — powers the provider pickers. */
+  catalog: CatalogMeta;
 }
 
 /** Rendered on `window.unlimited` by the preload. */

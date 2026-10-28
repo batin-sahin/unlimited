@@ -1,5 +1,6 @@
 import {
   MAX_SUB_AGENTS,
+  type CatalogProviderMeta,
   type DelegateKind,
   type ProfileConfig,
   type ProviderConfig,
@@ -39,11 +40,15 @@ export interface WizardDraft {
   spendCapUsd: string;
 }
 
-export const DEFAULT_BASE_URL: Record<ProviderKind, string> = {
+/**
+ * Fallback endpoints for CUSTOM endpoints only (catalog providers carry
+ * their own `api`). Aligned with main's well-known BASE_URLS: the Anthropic
+ * client appends /messages, the Google client /models/<model>:…, so the
+ * version path must be part of the base URL.
+ */
+export const CUSTOM_BASE_URL: Record<ProviderKind, string> = {
   openai: "https://api.openai.com/v1",
-  anthropic: "https://api.anthropic.com",
-  // Google client builds {base}/models/<model>:streamGenerateContent?alt=sse,
-  // so the v1beta path must be part of the base URL.
+  anthropic: "https://api.anthropic.com/v1",
   google: "https://generativelanguage.googleapis.com/v1beta",
 };
 
@@ -51,10 +56,11 @@ export const DEFAULT_PROVIDER_KIND: ProviderKind = "openai";
 export const DEFAULT_WINDOW_START = "09:00";
 export const DEFAULT_WINDOW_END = "17:00";
 
+/** A new slot starts unassigned: custom/empty until a catalog provider is picked. */
 export function emptyProvider(): ProviderConfig {
   return {
     kind: DEFAULT_PROVIDER_KIND,
-    baseUrl: DEFAULT_BASE_URL[DEFAULT_PROVIDER_KIND],
+    baseUrl: CUSTOM_BASE_URL[DEFAULT_PROVIDER_KIND],
     model: "",
     apiKey: "",
   };
@@ -89,13 +95,39 @@ export function emptyDraft(): WizardDraft {
 }
 
 /**
- * Switching kind keeps a customized baseUrl but swaps in the new kind's
- * default when the field is empty or still holds the previous default.
+ * Custom-endpoint kind radios: switching keeps a customized baseUrl but
+ * swaps in the new kind's fallback when the field is empty or still holds
+ * the previous kind's fallback.
  */
 export function withProviderKind(provider: ProviderConfig, kind: ProviderKind): ProviderConfig {
   if (provider.kind === kind) return provider;
-  const onDefault = provider.baseUrl.trim() === "" || provider.baseUrl === DEFAULT_BASE_URL[provider.kind];
-  return { ...provider, kind, baseUrl: onDefault ? DEFAULT_BASE_URL[kind] : provider.baseUrl };
+  const onDefault = provider.baseUrl.trim() === "" || provider.baseUrl === CUSTOM_BASE_URL[provider.kind];
+  return { ...provider, kind, baseUrl: onDefault ? CUSTOM_BASE_URL[kind] : provider.baseUrl };
+}
+
+/**
+ * Picking a catalog provider derives everything: providerId, wire protocol
+ * and endpoint from the entry. The model value resets — model ids from a
+ * different provider make no sense here. The key is kept.
+ */
+export function withCatalogProvider(provider: ProviderConfig, entry: CatalogProviderMeta): ProviderConfig {
+  if (provider.providerId === entry.id) return provider;
+  return {
+    ...provider,
+    providerId: entry.id,
+    kind: entry.kind,
+    // Never carry the previous provider's endpoint across: a catalog entry
+    // without an api leaves the field empty for the user to fill.
+    baseUrl: entry.api,
+    model: "",
+  };
+}
+
+/** Escape hatch: drop the catalog link, keep the endpoint as a free field. */
+export function toCustomEndpoint(provider: ProviderConfig): ProviderConfig {
+  const next = { ...provider };
+  delete next.providerId;
+  return next;
 }
 
 /** Tolerant normalization for profiles loaded off disk (Faz 0 files). */
@@ -105,7 +137,10 @@ function normalizeProvider(p: Partial<ProviderConfig> | undefined): ProviderConf
   const kind: ProviderKind = p.kind === "anthropic" || p.kind === "google" ? p.kind : "openai";
   return {
     kind,
-    baseUrl: typeof p.baseUrl === "string" ? p.baseUrl : DEFAULT_BASE_URL[kind],
+    // Profiles from before the catalog have no providerId → they load as
+    // custom endpoints and keep whatever kind/baseUrl they were saved with.
+    ...(typeof p.providerId === "string" && p.providerId ? { providerId: p.providerId } : {}),
+    baseUrl: typeof p.baseUrl === "string" ? p.baseUrl : CUSTOM_BASE_URL[kind],
     model: typeof p.model === "string" ? p.model : "",
     apiKey: typeof p.apiKey === "string" ? p.apiKey : "",
   };
@@ -185,7 +220,14 @@ export function draftToProfile(d: WizardDraft): ProfileConfig {
 }
 
 function trimProvider(p: ProviderConfig): ProviderConfig {
-  return { kind: p.kind, baseUrl: p.baseUrl.trim(), model: p.model.trim(), apiKey: p.apiKey.trim() };
+  return {
+    kind: p.kind,
+    // Catalog id is only written when set — absent means custom endpoint.
+    ...(p.providerId ? { providerId: p.providerId } : {}),
+    baseUrl: p.baseUrl.trim(),
+    model: p.model.trim(),
+    apiKey: p.apiKey.trim(),
+  };
 }
 
 export function splitLines(text: string): string[] {
@@ -230,6 +272,21 @@ export function maskKey(key: string): string {
   if (!key) return "—";
   if (key.length <= 8) return "•".repeat(key.length);
   return `••••••••${key.slice(-4)}`;
+}
+
+/** "128k" / "1M" context note, or null when the catalog has no number. */
+export function formatCtx(tokens: number | undefined): string | null {
+  if (tokens === undefined || !Number.isFinite(tokens) || tokens <= 0) return null;
+  if (tokens < 1000) return String(tokens);
+  if (tokens < 1_000_000) {
+    const k = tokens / 1000;
+    return `${k >= 100 ? k.toFixed(0) : stripZeroDecimal(k.toFixed(1))}k`;
+  }
+  return `${stripZeroDecimal((tokens / 1_000_000).toFixed(1))}M`;
+}
+
+function stripZeroDecimal(s: string): string {
+  return s.endsWith(".0") ? s.slice(0, -2) : s;
 }
 
 export const MAX_SUB_AGENT_SLOTS = MAX_SUB_AGENTS;

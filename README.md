@@ -17,6 +17,14 @@ agent that steps out of line.
 - **Delegate (optional)** — instead of built-in tools, the crew can drive an external
   CLI: OpenCode, Claude Code, Codex, or Kimi Code. Health-checked before start.
 
+## Providers
+
+The wizard's pickers draw from the **models.dev catalog** — 233 providers / ~8,900
+models at last build — each mapped to one of three wire protocols (OpenAI-compatible,
+Anthropic, Google). A custom endpoint (OpenAI-compatible base URL, your own protocol)
+is always available as an escape hatch. The catalog is refreshed at build time
+(`npm run catalog`); a fetched copy ships in the repo, so the app works offline.
+
 ## Discipline
 
 - **Time budget**: days (required) + hours/minutes (optional). The remaining time is

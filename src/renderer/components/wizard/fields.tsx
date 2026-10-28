@@ -52,6 +52,8 @@ interface TextFieldProps extends Common {
   readOnly?: boolean;
   mono?: boolean;
   type?: "text" | "password" | "time";
+  /** Datalist id for model suggestions. */
+  list?: string;
 }
 
 export function TextField(props: TextFieldProps) {
@@ -68,6 +70,7 @@ export function TextField(props: TextFieldProps) {
         value={props.value}
         placeholder={props.placeholder}
         readOnly={props.readOnly}
+        list={props.list}
         onChange={(e) => props.onChange(e.target.value)}
         onBlur={props.onBlur}
         aria-invalid={props.error ? true : undefined}

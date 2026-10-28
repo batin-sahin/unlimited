@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { CatalogMeta } from "../../../shared/types";
 import type { WizardDraft } from "./draft";
 import { ProviderFields } from "./ProviderFields";
 import { providerFieldProblems } from "./validate";
@@ -6,13 +7,15 @@ import { providerFieldProblems } from "./validate";
 interface StepSourceProps {
   draft: WizardDraft;
   updateSource: (patch: Partial<WizardDraft["source"]>) => void;
+  /** models.dev catalog from bootstrap; null while it is still loading. */
+  catalog: CatalogMeta | null;
 }
 
 /**
  * Step 2 — the trusted "limit-proof" provider. Worker AND supervisor run on
  * it, so every field is required and validated live.
  */
-export function StepSource({ draft, updateSource }: StepSourceProps) {
+export function StepSource({ draft, updateSource, catalog }: StepSourceProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const blur = (key: string) => setTouched((t) => ({ ...t, [key]: true }));
   const problems = providerFieldProblems(draft.source);
@@ -29,6 +32,7 @@ export function StepSource({ draft, updateSource }: StepSourceProps) {
         idPrefix="source"
         value={draft.source}
         onChange={updateSource}
+        catalog={catalog}
         onFieldBlur={(field) => blur(field)}
         errors={{
           baseUrl: errorFor("baseUrl"),
