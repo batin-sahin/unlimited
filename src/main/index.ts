@@ -67,6 +67,12 @@ function createWindow(): void {
     win.webContents.once("did-finish-load", () => {
       setTimeout(async () => {
         try {
+          // An occluded window stops painting on macOS and capturePage then
+          // returns a stale frame; keep it painting and in front.
+          win!.webContents.setBackgroundThrottling(false);
+          win!.show();
+          win!.focus();
+          win!.moveTop();
           if (process.env.UNLIMITED_SMOKE_REDUCED) {
             win!.webContents.debugger.attach("1.3");
             await win!.webContents.debugger.sendCommand("Emulation.setEmulatedMedia", {
@@ -81,6 +87,7 @@ function createWindow(): void {
             }
             await new Promise((resolve) => setTimeout(resolve, 650));
           }
+          await new Promise((resolve) => setTimeout(resolve, 350));
           const image = await win!.webContents.capturePage();
           const out = path.join(app.getPath("temp"), "unlimited-smoke.png");
           fs.writeFileSync(out, image.toPNG());

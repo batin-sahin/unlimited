@@ -98,6 +98,21 @@ body {
   gap: 14px;
   padding: 26px 32px 18px;
   border-bottom: 1px solid var(--rule);
+  /* The header is the window handle: hiddenInset leaves no native title bar. */
+  -webkit-app-region: drag;
+}
+
+/* Controls inside the handle stay clickable. */
+.brand-block button,
+.brand-block a,
+.brand-block input,
+.brand-block select {
+  -webkit-app-region: no-drag;
+}
+
+/* macOS traffic lights (18,20 · 12px) sit exactly where the brand starts. */
+html[data-os="macos"] .brand-block {
+  padding-left: 96px;
 }
 
 .brand-mark {
