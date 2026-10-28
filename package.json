@@ -1,0 +1,52 @@
+{
+  "name": "unlimited",
+  "productName": "Unlimited",
+  "version": "0.1.0",
+  "description": "Unlimited — a weeks-long autonomous agent orchestrator: worker + supervisor + sub-agent pool, with a compaction engine that forgets nothing.",
+  "author": "Asael",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "build:main": "node scripts/build.mjs main",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "typecheck": "tsc --noEmit",
+    "dev": "vite",
+    "dev:desktop": "npm run build:main && npm run build:renderer && electron .",
+    "start": "npm run build && electron .",
+    "pack:mac": "npm run build && electron-builder --mac",
+    "smoke": "npm run build && electron . --smoke"
+  },
+  "build": {
+    "appId": "com.asael.unlimited",
+    "productName": "Unlimited",
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    }
+  },
+  "dependencies": {
+    "@fontsource-variable/spline-sans-mono": "^5.3.0",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "lucide-react": "^1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.9",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}

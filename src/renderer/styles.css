@@ -1,0 +1,259 @@
+/* ============================================================
+   Unlimited — design tokens ("Mission Control on paper stock")
+   Square geometry, 1px rules, AA contrast, no glow/gradient.
+   Faz 0 baseline; extend with sections, never redefine tokens.
+   ============================================================ */
+
+:root {
+  --font-sans: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --font-cond: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-mono: "Spline Sans Mono", "SF Mono", Menlo, monospace;
+
+  /* Paper stock */
+  --bg: #e9ebe7;
+  --bg-deep: #dfe2dc;
+  --surface: #f0f1ec;
+  --surface-2: #e4e7e0;
+  --surface-3: #daded6;
+  --field: #f5f6f1;
+
+  /* Ink */
+  --ink: #161a17;
+  --ink-2: #454d46;
+  --ink-3: #6d756d;
+
+  /* Rules */
+  --rule: rgba(22, 26, 23, 0.14);
+  --rule-strong: rgba(22, 26, 23, 0.34);
+
+  /* Signal pine (primary) */
+  --accent: #1f5f4e;
+  --accent-ink: #143f33;
+  --on-accent: #eef1ea;
+  --accent-soft: rgba(31, 95, 78, 0.12);
+
+  /* Status */
+  --brick: #a2301c;
+  --brick-soft: rgba(162, 48, 28, 0.1);
+  --amber: #8a5a00;
+  --amber-soft: rgba(138, 90, 0, 0.12);
+
+  --focus: #1f5f4e;
+  --shadow: 0 1px 0 rgba(22, 26, 23, 0.06), 0 12px 32px rgba(22, 26, 23, 0.14);
+
+  /* Type scale (px) */
+  --text-9: 9px;
+  --text-10: 10px;
+  --text-11: 11px;
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-16: 16px;
+  --text-20: 20px;
+  --text-28: 28px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-13);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- App frame ---------- */
+
+.app {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.brand-block {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 32px 18px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  background: var(--accent);
+}
+
+.brand-name {
+  margin: 0;
+  font-family: var(--font-cond);
+  font-size: var(--text-28);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.brand-sub {
+  margin: 0 0 0 auto;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-10);
+  letter-spacing: 0.06em;
+}
+
+.boot-main {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 32px;
+}
+
+.boot-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-11);
+}
+
+.boot-version {
+  padding: 2px 8px;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+}
+
+.boot-error {
+  max-width: 520px;
+  padding: 12px 14px;
+  border: 1px solid var(--brick);
+  background: var(--brick-soft);
+  color: var(--brick);
+  font-family: var(--font-mono);
+  font-size: var(--text-11);
+}
+
+/* ---------- Base primitives ---------- */
+
+.btn {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-cond);
+  font-size: var(--text-11);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.btn:hover {
+  border-color: var(--rule-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.btn.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn.primary:hover {
+  border-color: var(--accent-ink);
+  background: var(--accent-ink);
+}
+
+.btn.danger {
+  border-color: var(--rule);
+  color: var(--ink-2);
+}
+
+.btn.danger:hover {
+  border-color: var(--brick);
+  background: var(--brick-soft);
+  color: var(--brick);
+}
+
+.btn:disabled {
+  border-color: var(--rule);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.field {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--rule-strong);
+  background: var(--field);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-13);
+}
+
+textarea.field {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.5;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-2);
+  font-family: var(--font-cond);
+  font-size: var(--text-10);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.field-note {
+  margin: 3px 0 0;
+  color: var(--ink-3);
+  font-size: var(--text-11);
+}
+
+.card {
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
