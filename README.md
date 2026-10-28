@@ -30,8 +30,15 @@ agent that steps out of line.
 
 ## Status
 
-Faz 0 — scaffold and locked contracts. See `src/shared/types.ts` for the data model.
-The full phase plan lives in the project board / roadmap notes.
+- **Faz 0** — scaffold, locked contracts (`src/shared/types.ts`), profile storage, smoke harness. ✅
+- **Faz 2 (core)** — provider clients (OpenAI/Anthropic/Google streaming), `BudgetClock`
+  (wall-clock budget, daily-window pause), run journal, `AgentRunner` (report_done exit,
+  429 backoff, killable), `Supervisor` (deterministic forbidden-list + workspace-escape
+  checks, then LLM verdicts: warn → repeat → kill), `RunManager` orchestrator. ✅
+- **Faz 1/2/4 in flight** — setup wizard UI, core tool set, delegate CLI adapters
+  (OpenCode / Claude Code / Codex / Kimi Code, headless flags verified against docs).
+- **Next** — compaction engine (meter, ledger, recall, elide, soak test), coordinator
+  spawning (max 2), run console, crash resume.
 
 ## Develop
 

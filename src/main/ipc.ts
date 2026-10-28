@@ -1,9 +1,11 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import { checkDelegateHealth } from "./delegates/health.js";
 import { deleteProfile, listProfiles, loadProfile, saveProfile } from "./profiles.js";
+import { RunManager } from "./orchestrator.js";
 import type { DelegateKind, ProfileConfig, RunEvent } from "../shared/types";
 
 let win: BrowserWindow | null = null;
+let runManager: RunManager | null = null;
 
 export function setWindow(w: BrowserWindow): void {
   win = w;
@@ -11,6 +13,15 @@ export function setWindow(w: BrowserWindow): void {
 
 export function emit(event: RunEvent): void {
   if (win && !win.isDestroyed()) win.webContents.send("unlimited:event", event);
+}
+
+export function getRunManager(): RunManager {
+  if (!runManager) runManager = new RunManager(emit);
+  return runManager;
+}
+
+function manager(): RunManager {
+  return getRunManager();
 }
 
 export function registerIpc(): void {
@@ -40,12 +51,9 @@ export function registerIpc(): void {
 
   ipcMain.handle("unlimited:check-delegate", (_e, kind: DelegateKind) => checkDelegateHealth(kind));
 
-  ipcMain.handle("unlimited:start-run", (_e, _profileId: string) => {
-    // The orchestrator lands in Faz 2; the wizard stays honest until then.
-    throw new Error("Run engine is not wired yet (Faz 2).");
-  });
+  ipcMain.handle("unlimited:start-run", (_e, profileId: string) => manager().startRun(profileId));
 
   ipcMain.handle("unlimited:panic", () => {
-    // Faz 2: stop every agent and every delegate child.
+    manager().panic();
   });
 }

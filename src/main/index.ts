@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { registerIpc, setWindow } from "./ipc.js";
+import { registerIpc, getRunManager, setWindow } from "./ipc.js";
 import { buildMenu } from "./menu.js";
 
 const smoke = process.argv.includes("--smoke");
@@ -116,5 +116,9 @@ if (!gotLock) {
 
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin" || smoke) app.quit();
+  });
+
+  app.on("before-quit", () => {
+    void getRunManager().shutdown();
   });
 }

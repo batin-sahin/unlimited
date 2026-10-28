@@ -1,0 +1,173 @@
+import type { AgentRole, ProfileConfig, RunEvent, RunEndReason } from "../shared/types.js";
+import { budgetMs } from "../shared/types.js";
+import { BudgetClock, formatRemaining } from "./budget.js";
+import { Journal } from "./journal.js";
+import { loadProfile } from "./profiles.js";
+import { startPowerBlock, stopPowerBlock } from "./power.js";
+import { AgentRunner } from "./agents/runner.js";
+import { workerSystem } from "./agents/prompts.js";
+import { Supervisor } from "./supervisor/supervisor.js";
+import { dispatchTool } from "./agents/dispatch.js";
+import { askDelegateTool } from "./delegates/tool.js";
+import { checkDelegateHealth } from "./delegates/health.js";
+import "./agents/tools/files.js";
+import "./agents/tools/terminal.js";
+
+interface ActiveRun {
+  runId: string;
+  journal: Journal;
+  budget: BudgetClock;
+  worker: AgentRunner;
+  stopped: boolean;
+}
+
+function deadlineLocal(budget: BudgetClock): string {
+  return new Date(Date.now() + budget.remainingMs()).toLocaleString();
+}
+
+/**
+ * Owns the active run: worker loop, budget clock, journal, power block.
+ * Supervisor verdicts (Faz 2.5), coordinator spawning, and delegate
+ * adapters land on this spine.
+ */
+export class RunManager {
+  private active: ActiveRun | null = null;
+
+  constructor(private emitEvent: (event: RunEvent) => void) {}
+
+  async startRun(profileId: string): Promise<{ runId: string }> {
+    if (this.active) throw new Error("A run is already active. Panic or wait for it to end.");
+    const profile = loadProfile(profileId);
+    if (!profile) throw new Error(`Profile not found: ${profileId}`);
+    this.validate(profile);
+
+    const runId = Math.random().toString(36).slice(2, 10);
+    const journal = new Journal(runId);
+
+    startPowerBlock();
+    const budget = new BudgetClock(budgetMs(profile.budget), profile.window);
+
+    const emitBase = (event: RunEvent) => {
+      journal.append(event);
+      this.emitEvent(event);
+    };
+
+    const runnerMap = new Map<string, AgentRunner>();
+    const supervisor = new Supervisor(profile, {
+      emit: emitBase,
+      runners: runnerMap,
+      kill: (agentId, reason) => {
+        runnerMap.get(agentId)?.kill(reason);
+        emitBase({ type: "agent-status", agentId, status: "killed", note: reason, at: Date.now() });
+      },
+      warn: (agentId, reason) => {
+        runnerMap
+          .get(agentId)
+          ?.push("user", `SUPERVISOR WARNING: ${reason} — correct course immediately. A repeat ends this agent.`);
+        emitBase({ type: "agent-status", agentId, status: "warned", note: reason, at: Date.now() });
+      },
+    });
+    // Every run event feeds the supervisor; verdicts flow back through emitBase.
+    const emit = (event: RunEvent) => {
+      emitBase(event);
+      supervisor.observe(event);
+    };
+
+    const worker = new AgentRunner({
+      agentId: "worker",
+      role: "worker",
+      label: "Worker",
+      provider: profile.source,
+      runId,
+      workspace: profile.workspace,
+      baseSystem: workerSystem(profile, deadlineLocal(budget)),
+      hooks: { emit },
+      extraTools: [
+        dispatchTool(profile, runId, emit, runnerMap),
+        ...(profile.delegate ? [askDelegateTool(profile, runId, emit)] : []),
+      ],
+      timeLine: () => ({
+        remaining: formatRemaining(budget.remainingMs()),
+        pausedNote: budget.paused ? " · PAUSED (outside work window)" : "",
+      }),
+      deadlineLocal: deadlineLocal(budget),
+    });
+    runnerMap.set("worker", worker);
+
+    // Delegate configured → report its health into the run feed.
+    if (profile.delegate) {
+      void checkDelegateHealth(profile.delegate.kind).then((health) => {
+        if (this.active?.runId === runId) emit({ type: "delegate-health", health, at: Date.now() });
+      });
+    }
+
+    this.active = { runId, journal, budget, worker, stopped: false };
+    emit({ type: "run-started", runId, profileId, at: Date.now() });
+    emit({
+      type: "agent-started",
+      agentId: "worker",
+      role: "worker" as AgentRole,
+      label: "Worker",
+      model: profile.source.model,
+      at: Date.now(),
+    });
+
+    budget.onTick((remainingMs, paused, windowOpen) => {
+      if (this.active?.runId !== runId) return;
+      emit({ type: "budget-tick", runId, remainingMs, windowOpen, paused, at: Date.now() });
+      if (remainingMs <= 0) void this.endRun("deadline", "Time budget exhausted.");
+    });
+
+    budget.start();
+
+    void worker
+      .run(this.kickoff(profile))
+      .then((summary) => {
+        if (this.active?.runId === runId) void this.endRun("done", summary);
+      })
+      .catch((err) => {
+        if (this.active?.runId === runId && !this.active.stopped) {
+          void this.endRun("error", String(err?.message || err));
+        }
+      });
+
+    return { runId };
+  }
+
+  panic(): void {
+    if (!this.active) return;
+    this.active.worker.kill("panic: user requested full stop");
+    void this.endRun("panic", "Panic stop by user.");
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.active) {
+      this.active.worker.kill("app shutdown");
+      await this.endRun("error", "App shutdown.");
+    }
+  }
+
+  private async endRun(reason: RunEndReason, summary: string): Promise<void> {
+    const run = this.active;
+    if (!run || run.stopped) return;
+    run.stopped = true;
+    run.budget.stop();
+    run.worker.kill(reason === "done" ? "" : reason);
+    stopPowerBlock();
+    this.emitEvent({ type: "run-ended", runId: run.runId, reason, summary: summary.slice(0, 2000), at: Date.now() });
+    await run.journal.close();
+    this.active = null;
+  }
+
+  private kickoff(profile: ProfileConfig): string {
+    return `Begin the run. First, restate your understanding of the goal in 3-5 lines and lay out the work plan. Then start executing with your tools. Workspace: ${profile.workspace}`;
+  }
+
+  private validate(profile: ProfileConfig): void {
+    if (!profile.source?.apiKey) throw new Error("Source provider has no API key.");
+    if (!profile.source?.model) throw new Error("Source provider has no model.");
+    if (!profile.workspace) throw new Error("No workspace directory set.");
+    if (!profile.subAgents?.length) throw new Error("At least one sub-agent is required.");
+    if (profile.subAgents.length > 25) throw new Error("Sub-agent limit is 25.");
+  }
+}
